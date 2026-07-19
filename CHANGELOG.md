@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/CoCreate-app/CoCreate-documentdb/compare/v1.1.0...v1.1.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* set default branch to main ([2905b98](https://github.com/CoCreate-app/CoCreate-documentdb/commit/2905b9820dfd391c1417404f9bb6c464c68eb900))
+
 # [1.1.0](https://github.com/CoCreate-app/CoCreate-documentdb/compare/v1.0.0...v1.1.0) (2026-07-19)
 
 
