@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/CoCreate-app/CoCreate-documentdb/compare/v1.0.0...v1.1.0) (2026-07-19)
+
+
+### Features
+
+* Update README.md to reflect Amazon DocumentDB integration and enhance documentation ([e05d306](https://github.com/CoCreate-app/CoCreate-documentdb/commit/e05d306d5c91bceb4de95d940395f26da45e4b85))
+
 # 1.0.0 (2026-07-18)
 
 
