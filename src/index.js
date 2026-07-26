@@ -19,10 +19,19 @@ import mongodb from "@cocreate/mongodb";
 
 /**
  * Universal router routing DocumentDB (MongoDB API) request methods safely.
- * Under the hood, this uses the fully-featured MongoDB engine.
+ *
+ * Under the hood, DocumentDB (for MongoDB API) utilizes the MongoDB wire protocol.
+ * Rather than re-implementing identical query handling logic, this wrapper
+ * delegates request execution directly to `@cocreate/mongodb`.
+ *
+ * All operations conform to CoCreate's unified, object-oriented JSON protocol
+ * (e.g., `object.create`, `object.read`, `object.update`, `object.delete`).
+ * This standardized protocol operates across all database drivers and third-party
+ * APIs, allowing seamless, parallel multi-database state routing across backends
+ * without exposing underlying engine-specific APIs to the application layer.
  */
 export const send = (data) => {
-	return mongodb.send(data);
+    return mongodb.send(data);
 };
 
 export default { send };
