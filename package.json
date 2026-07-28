@@ -4,8 +4,8 @@
   "description": "Lightweight, real-time DocumentDB CRUD wrapper and multi-tenant state routing client for the collaborative CoCreate ecosystem.",
   "keywords": [
     "documentdb",
-    "mysql",
-    "sql",
+    "mongodb",
+    "nosql",
     "jsonb",
     "crud-api",
     "abstract-crud",
@@ -44,6 +44,11 @@
   },
   "type": "module",
   "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./distribution": "./dist/mongodb.js",
+    "./installer": "./installer/mongodb.installer.js"
+  },
   "devDependencies": {
     "@cocreate/webpack": "^1.6.0"
   },
