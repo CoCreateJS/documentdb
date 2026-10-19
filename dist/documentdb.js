@@ -32923,6 +32923,7 @@ exports.URLSearchParams = URLSearchParams;
 /* harmony export */   VR: () => (/* binding */ queryData)
 /* harmony export */ });
 /* unused harmony exports isEqualArray, isEqualObject, sortData */
+/* unused harmony import specifier */ var getValueFromObject;
 /* harmony import */ var _getValueFromObject_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(6902);
 /* harmony import */ var _isValidDate_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(3988);
 
@@ -32976,23 +32977,24 @@ function isEqualValue(value1, value2) {
 }
 function queryMatch(data, query) {
   for (let key of Object.keys(query)) {
+    const queryEntry = query[key];
     let dataValue;
     try {
       dataValue = (0,_getValueFromObject_js__WEBPACK_IMPORTED_MODULE_0__/* .getValueFromObject */ .r)(data, key, true);
     } catch (error) {
       return false;
     }
-    if (typeof query[key] === "string" || typeof query[key] === "number" || typeof query[key] === "boolean") {
-      if (Array.isArray(dataValue)) return dataValue.includes(query[key]);
-      else return dataValue === query[key];
-    } else if (Array.isArray(query[key])) {
+    if (queryEntry === null || typeof queryEntry !== "object") {
+      if (Array.isArray(dataValue)) return dataValue.includes(queryEntry);
+      else return Object.is(dataValue, queryEntry);
+    } else if (Array.isArray(queryEntry)) {
       if (Array.isArray(dataValue)) {
-        return isEqualArray(dataValue, query[key]);
+        return isEqualArray(dataValue, queryEntry);
       } else {
         return false;
       }
     } else {
-      for (let property of Object.keys(query[key])) {
+      for (let property of Object.keys(queryEntry)) {
         if (property === "$options") continue;
         if (!property.startsWith("$")) {
           if (typeof dataValue !== "object") {
@@ -33003,7 +33005,7 @@ function queryMatch(data, query) {
               { [property]: query[key][property] }
             );
         } else {
-          let queryValue = query[key][property];
+          let queryValue = queryEntry[property];
           if ((0,_isValidDate_js__WEBPACK_IMPORTED_MODULE_1__/* .isValidDate */ .v)(queryValue) && (0,_isValidDate_js__WEBPACK_IMPORTED_MODULE_1__/* .isValidDate */ .v)(dataValue)) {
             queryValue = new Date(queryValue);
             dataValue = new Date(dataValue);
@@ -33034,6 +33036,7 @@ function queryMatch(data, query) {
               queryStatus = dataValue >= queryValue;
               break;
             case "$in":
+              queryValue = Array.isArray(queryValue) ? queryValue : [queryValue];
               if (Array.isArray(dataValue)) {
                 queryStatus = dataValue.some(
                   (element) => queryValue.includes(element)
@@ -33043,6 +33046,7 @@ function queryMatch(data, query) {
               }
               break;
             case "$nin":
+              queryValue = Array.isArray(queryValue) ? queryValue : [queryValue];
               if (Array.isArray(dataValue)) {
                 queryStatus = !dataValue.some(
                   (element) => queryValue.includes(element)
@@ -33144,55 +33148,115 @@ function searchData(data, search) {
   for (let i = 0; i < search.length; i++) {
     let searchValue = search[i].value;
     if (!Array.isArray(searchValue)) searchValue = [searchValue];
+    const caseSensitive = search[i].caseSensitive === true || search[i].caseSensitive === "true";
+    searchValue = searchValue.map((value) => {
+      const text = String(value ?? "");
+      return caseSensitive ? text : text.toLowerCase();
+    });
     for (let key in data) {
       let value = data[key];
       let status = false;
+      if (value === null || value === void 0) value = "";
       switch (typeof value) {
         case "number":
+        case "boolean":
+        case "bigint":
+        case "symbol":
           value = value.toString();
           break;
         case "object":
-          value = JSON.stringify(value);
+          value = JSON.stringify(value) || "";
           break;
         case "function":
           value = value.toString();
           break;
       }
-      if (search[i].caseSensitive != "true" || search[i].caseSensitive != true)
-        value = value.toLowerCase();
-      for (let i2 = 0; i2 < searchValue.length; i2++) {
-        let searchString = searchValue[i2];
-        if (search[i2].caseSensitive != "true" || search[i2].caseSensitive != true)
-          searchString = searchString.toLowerCase();
-        if (searchString === "" && search[i2].operator === "and") {
+      if (!caseSensitive) value = value.toLowerCase();
+      for (let j = 0; j < searchValue.length; j++) {
+        const searchString = searchValue[j];
+        if (searchString === "" && search[i].operator === "and") {
           if (value !== "") return false;
         }
         if (value.indexOf(searchString) > -1) status = true;
         if (status) return true;
-        else if (search[i2].operator == "and") return false;
+        else if (search[i].operator == "and") return false;
       }
     }
-    if (search[i].value.length && search[i].operator == "or") return false;
+    if (searchValue.some((value) => value.length > 0) && search[i].operator === "or") return false;
   }
   return true;
+}
+function getMongoTypeOrder(value) {
+  if (value?._bsontype === "MinKey") return 0;
+  if (value == null) return 1;
+  if (typeof value === "number" || typeof value === "bigint") return 2;
+  if (typeof value === "string" || typeof value === "symbol") return 3;
+  if (Array.isArray(value)) return value.length ? 5 : 0.5;
+  if (value instanceof Uint8Array || value instanceof ArrayBuffer) return 6;
+  if (value?._bsontype === "ObjectId" || value?.constructor?.name === "ObjectId")
+    return 7;
+  if (typeof value === "boolean") return 8;
+  if (value instanceof Date) return 9;
+  if (value?._bsontype === "Timestamp") return 10;
+  if (value instanceof RegExp) return 11;
+  if (typeof value === "function") return 12;
+  if (value?._bsontype === "MaxKey") return 14;
+  if (typeof value === "object") return 4;
+  return 13;
+}
+function compareStrings(a, b) {
+  const aString = String(a);
+  const bString = String(b);
+  if (aString === bString) return 0;
+  return aString < bString ? -1 : 1;
+}
+function compareMongoObjects(a, b) {
+  const aEntries = Object.entries(a);
+  const bEntries = Object.entries(b);
+  const length = Math.min(aEntries.length, bEntries.length);
+  for (let index = 0; index < length; index++) {
+    const [aKey, aValue] = aEntries[index];
+    const [bKey, bValue] = bEntries[index];
+    const typeComparison = getMongoTypeOrder(aValue) - getMongoTypeOrder(bValue);
+    if (typeComparison) return Math.sign(typeComparison);
+    const keyComparison = compareStrings(aKey, bKey);
+    if (keyComparison) return keyComparison;
+    const valueComparison = compareMongoValues(aValue, bValue);
+    if (valueComparison) return valueComparison;
+  }
+  return Math.sign(aEntries.length - bEntries.length);
+}
+function getArraySortValue(value, direction) {
+  if (!value.length) return value;
+  const sorted = [...value].sort(compareMongoValues);
+  return direction === "desc" ? sorted[sorted.length - 1] : sorted[0];
+}
+function compareMongoValues(a, b, direction = "asc") {
+  if (Array.isArray(a)) a = getArraySortValue(a, direction);
+  if (Array.isArray(b)) b = getArraySortValue(b, direction);
+  if (Object.is(a, b) || a == null && b == null) return 0;
+  const typeComparison = getMongoTypeOrder(a) - getMongoTypeOrder(b);
+  if (typeComparison) return Math.sign(typeComparison);
+  if (a == null || b == null) return a == null ? -1 : 1;
+  if (typeof a === "number" || typeof a === "bigint")
+    return a < b ? -1 : a > b ? 1 : 0;
+  if (typeof a === "string" || typeof a === "symbol")
+    return compareStrings(a, b);
+  if (typeof a === "boolean") return Number(a) - Number(b);
+  if (a instanceof Date) return Math.sign(a.getTime() - b.getTime());
+  if (a instanceof RegExp) return compareStrings(a.toString(), b.toString());
+  if (typeof a === "object") return compareMongoObjects(a, b);
+  return compareStrings(a, b);
 }
 function sortData(data, sort) {
   return data.sort((a, b) => {
     for (let i = 0; i < sort.length; i++) {
-      let key = sort[i].key;
-      if (a[key] == null && b[key] == null) continue;
-      if (a[key] == null) return sort[i].direction === "desc" ? -1 : 1;
-      if (b[key] == null) return sort[i].direction === "desc" ? 1 : -1;
-      if (typeof a[key] !== typeof b[key]) {
-        return typeof a[key] < typeof b[key] ? -1 : 1;
-      }
-      if (a[key] !== b[key]) {
-        if (typeof a[key] === "string") {
-          return sort[i].direction === "desc" ? b[key].localeCompare(a[key]) : a[key].localeCompare(b[key]);
-        } else {
-          return sort[i].direction === "desc" ? b[key] - a[key] : a[key] - b[key];
-        }
-      }
+      const key = sort[i].key;
+      const direction = sort[i].direction === "desc" ? "desc" : "asc";
+      const aValue = getValueFromObject(a, key);
+      const bValue = getValueFromObject(b, key);
+      const comparison = compareMongoValues(aValue, bValue, direction);
+      if (comparison) return direction === "desc" ? -comparison : comparison;
     }
     return 0;
   });
@@ -33375,10 +33439,10 @@ function array(method, data) {
                   organization_id: data.organization_id
                 });
                 for (let res of result) {
-                  if (data.$filter && data.$filter.query) {
+                  if (data.filter && data.filter.query) {
                     let isFilter = (0,_cocreate_utils__WEBPACK_IMPORTED_MODULE_0__/* .queryData */ .VR)(
                       res,
-                      data.$filter.query
+                      data.filter.query
                     );
                     if (isFilter)
                       arrayArray.push({
@@ -33503,7 +33567,7 @@ function array(method, data) {
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (array);
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, [
-/* harmony export */   "A", 0, /* export default binding */ __WEBPACK_DEFAULT_EXPORT__
+/* harmony export */   "A", 0, __WEBPACK_DEFAULT_EXPORT__
 /* harmony export */ ]);
 
 
@@ -33535,10 +33599,10 @@ function database(method, data) {
               organization_id: data.organization_id
             });
             for (let database2 of dbs.databases) {
-              if (data.$filter && data.$filter.query) {
+              if (data.filter && data.filter.query) {
                 let isFilter = (0,_cocreate_utils__WEBPACK_IMPORTED_MODULE_0__/* .queryData */ .VR)(
                   database2,
-                  data.$filter.query
+                  data.filter.query
                 );
                 if (isFilter)
                   databaseArray.push({
@@ -33586,7 +33650,7 @@ function database(method, data) {
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (database);
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, [
-/* harmony export */   "A", 0, /* export default binding */ __WEBPACK_DEFAULT_EXPORT__
+/* harmony export */   "A", 0, __WEBPACK_DEFAULT_EXPORT__
 /* harmony export */ ]);
 
 
@@ -33615,7 +33679,7 @@ async function send(data) {
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({ send });
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, [
-/* harmony export */   "A", 0, /* export default binding */ __WEBPACK_DEFAULT_EXPORT__
+/* harmony export */   "A", 0, __WEBPACK_DEFAULT_EXPORT__
 /* harmony export */ ]);
 
 
@@ -33632,8 +33696,23 @@ async function send(data) {
 
 
 
+function includesReference(value, expected) {
+  const values = Array.isArray(value) ? value : [value];
+  return values.includes(expected);
+}
+function normalizeSearchDocument(document) {
+  return Object.fromEntries(
+    Object.entries(document).map(([key, value]) => {
+      if (value === null || value === void 0) return [key, ""];
+      if (typeof value === "string" || typeof value === "object") {
+        return [key, value];
+      }
+      return [key, String(value)];
+    })
+  );
+}
 function object(method, data) {
-  const storageName = data.storageConfig?.name;
+  const storageName = data.storageConfig?.name || "mongodb";
   return new Promise(
     async (resolve, reject) => {
       try {
@@ -33651,29 +33730,45 @@ function object(method, data) {
           for (let array of arrays) {
             const db = client.db(database);
             const arrayObj = db.collection(array);
-            const reference = {
-              $storage: storageName,
-              $database: database,
-              $array: array
-            };
             if (!data[type]) data[type] = [];
             else if (typeof data[type] === "string")
               data[type] = [{ _id: data[type] }];
             else if (!Array.isArray(data[type]))
               data[type] = [data[type]];
-            let isFilter;
-            if (data.$filter) isFilter = true;
+            for (let i = 0; i < data[type].length; i++) {
+              if (!Array.isArray(data[type][i])) continue;
+              data[type].splice(i, 1, ...data[type][i]);
+              i--;
+            }
+            let isFilter = Boolean(
+              data.filter && data.filter.isFilter !== false
+            );
+            const filterStorage = isFilter ? (0,_utilities_js__WEBPACK_IMPORTED_MODULE_4__/* .getFilterStorage */ .mR)(
+              data.filter,
+              storageName,
+              database,
+              array
+            ) : void 0;
+            const filterStartingIndex = filterStorage?.index ?? data.filter?.startingIndex ?? data.filter?.index ?? 0;
+            const documentsStartingLength = documents.length;
+            if (filterStorage)
+              filterStorage.startingIndex = filterStartingIndex;
             if (isFilter && !data[type].length)
               data[type].splice(0, 0, {
                 isFilter: "isEmptyObjectFilter"
               });
-            let filter = await (0,_utilities_js__WEBPACK_IMPORTED_MODULE_4__/* .createFilter */ .HI)(data, arrayObj);
+            let filter = await (0,_utilities_js__WEBPACK_IMPORTED_MODULE_4__/* .createFilter */ .HI)(
+              data,
+              arrayObj,
+              filterStorage
+            );
             let projections = {}, projection = {}, globalUpdate = {}, options = {};
-            if (data.$filter && data.$filter.key)
-              projection = data.$filter.key;
+            if (data.filter && data.filter.key)
+              projection = data.filter.key;
             if (method === "update")
               createUpdate(globalUpdate, options, data, true);
             const seenDocKeys = /* @__PURE__ */ new Set();
+            const sourceObjects = [];
             for (let i = 0; i < data[type].length; i++) {
               let $storage = data[type][i].$storage || [];
               let $database = data[type][i].$database || [];
@@ -33690,29 +33785,43 @@ function object(method, data) {
               if (!$database.includes(database))
                 $database.push(database);
               if (!$array.includes(array)) $array.push(array);
+              const objectReference = {
+                $storage,
+                $database,
+                $array
+              };
+              const sourceObject = {
+                ...data[type][i],
+                ...objectReference
+              };
+              sourceObjects.push(sourceObject);
               delete data[type][i].$storage;
               delete data[type][i].$database;
               delete data[type][i].$array;
-              if (method !== "create" && data[type][i].$filter) {
+              if (method !== "create" && data[type][i].filter) {
                 isFilter = true;
-                reference["$filter"] = data[type][i].$filter;
+                objectReference["filter"] = data[type][i].filter;
                 filter = await (0,_utilities_js__WEBPACK_IMPORTED_MODULE_4__/* .createFilter */ .HI)(
-                  { $filter: data[type][i].$filter },
+                  { filter: data[type][i].filter },
                   arrayObj
                 );
               }
               let { query, sort, index, limit } = filter;
               if (method === "create") {
-                if (typeof replaceArray === "function") {
-                  data[type][i] = replaceArray(data[type][i]);
-                }
                 data[type][i] = (0,_cocreate_utils__WEBPACK_IMPORTED_MODULE_2__/* .dotNotationToObject */ .O)(
                   data[type][i]
                 );
-                data[type][i]["organization_id"] = data["organization_id"];
+                if (!Object.hasOwn(data[type][i], "organization_id"))
+                  data[type][i].organization_id = data.organization_id;
+                const auditOn = new Date(data.timeStamp);
+                const auditBy = data.user_id || data.clientId;
                 data[type][i]["created"] = {
-                  on: new Date(data.timeStamp),
-                  by: data.user_id || data.clientId
+                  on: auditOn,
+                  by: auditBy
+                };
+                data[type][i]["modified"] = {
+                  on: auditOn,
+                  by: auditBy
                 };
               } else if (method === "update") {
                 if (!data[type][i].modified)
@@ -33724,7 +33833,8 @@ function object(method, data) {
                   data[type][i].modified.on = new Date(
                     data[type][i].modified.on
                   );
-                data[type][i].organization_id = data.organization_id;
+                if (!Object.hasOwn(data[type][i], "organization_id"))
+                  data[type][i].organization_id = data.organization_id;
                 createUpdate(update, options, data[type][i]);
               }
               if (data[type][i]._id || method === "create" || isFilter) {
@@ -33769,7 +33879,10 @@ function object(method, data) {
                       data[type][i]
                     );
                     data[type][i]._id = result.insertedId.toString();
-                    let createDoc = { ...data[type][i], ...reference };
+                    let createDoc = {
+                      ...data[type][i],
+                      ...objectReference
+                    };
                     delete createDoc.isFilter;
                     const docKey = `${database}:${array}:${createDoc._id}`;
                     if (!seenDocKeys.has(docKey)) {
@@ -33778,10 +33891,15 @@ function object(method, data) {
                     }
                   } else {
                     let cursor = arrayObj.find(query, { projection });
-                    if (sort && Object.keys(sort).length > 0) cursor = cursor.sort(sort);
-                    if (index) cursor = cursor.skip(index);
-                    if (limit) cursor = cursor.limit(limit);
+                    if (sort && Object.keys(sort).length > 0)
+                      cursor = cursor.sort(sort).allowDiskUse(true);
+                    const search = data[type][i].filter?.search || data.filter?.search;
+                    const hasSearch = Boolean(search?.length);
+                    if (!hasSearch && index) cursor = cursor.skip(index);
+                    if (!hasSearch && limit) cursor = cursor.limit(limit);
                     let hasDocuments = false;
+                    let matchedDocuments = 0;
+                    let returnedDocuments = 0;
                     for await (const document of cursor) {
                       hasDocuments = true;
                       process.emit("usage", {
@@ -33789,29 +33907,52 @@ function object(method, data) {
                         data: document,
                         organization_id: data.organization_id
                       });
-                      if (data.$filter && data.$filter.search) {
-                        let isMatch = (0,_cocreate_utils__WEBPACK_IMPORTED_MODULE_3__/* .searchData */ .Nw)(
-                          document,
-                          data.$filter.search
+                      if (hasSearch) {
+                        const isMatch = (0,_cocreate_utils__WEBPACK_IMPORTED_MODULE_3__/* .searchData */ .Nw)(
+                          normalizeSearchDocument(document),
+                          search
                         );
                         if (!isMatch) continue;
+                        if (matchedDocuments < index) {
+                          matchedDocuments++;
+                          continue;
+                        }
+                        matchedDocuments++;
                       }
                       if (method === "read") {
                         document._id = document._id.toString();
-                        let object2 = data[type].find(
-                          (obj) => obj._id && obj._id.toString() === document._id.toString()
+                        let object2 = sourceObjects.find(
+                          (obj) => obj._id && obj._id.toString() === document._id.toString() && includesReference(obj.$database, database) && includesReference(obj.$array, array)
                         );
+                        let readDocument = document;
                         if (object2 && object2.$storage && object2.modified && object2.modified.on) {
-                          if (document.modified && new Date(object2.modified.on) > new Date(document.modified.on)) {
-                            object2 = { ...document, ...object2 };
+                          const sourceModified = new Date(object2.modified.on);
+                          const targetModified = document.modified?.on ? new Date(document.modified.on) : null;
+                          if (!Number.isNaN(sourceModified.getTime()) && (!targetModified || Number.isNaN(targetModified.getTime()) || sourceModified > targetModified)) {
+                            const synchronizedDocument = { ...document, ...object2 };
+                            for (const key of [
+                              "$storage",
+                              "$database",
+                              "$array",
+                              "filter",
+                              "isFilter"
+                            ]) delete synchronizedDocument[key];
+                            for (const key of ["created", "modified"]) {
+                              if (synchronizedDocument[key]?.on)
+                                synchronizedDocument[key] = {
+                                  ...synchronizedDocument[key],
+                                  on: new Date(synchronizedDocument[key].on)
+                                };
+                            }
                             let docUpdate = {};
                             let docOptions = {};
-                            createUpdate(docUpdate, docOptions, object2);
+                            createUpdate(docUpdate, docOptions, synchronizedDocument);
                             let updateResult = await arrayObj.updateOne(
                               { _id: new mongodb__WEBPACK_IMPORTED_MODULE_0__/* .ObjectId */ .Vr(document._id) },
                               docUpdate,
                               docOptions
                             );
+                            readDocument = synchronizedDocument;
                             process.emit("usage", {
                               type: "ingress",
                               data: updateResult,
@@ -33819,7 +33960,10 @@ function object(method, data) {
                             });
                           }
                         }
-                        let readDoc = { ...document, ...reference };
+                        let readDoc = {
+                          ...readDocument,
+                          ...objectReference
+                        };
                         delete readDoc.isFilter;
                         const docKey = `${database}:${array}:${readDoc._id}`;
                         if (!seenDocKeys.has(docKey)) {
@@ -33881,7 +34025,7 @@ function object(method, data) {
                         let docToPush = {
                           ...document,
                           ...data[type][i],
-                          ...reference,
+                          ...objectReference,
                           _id: document._id.toString()
                         };
                         delete docToPush.isFilter;
@@ -33890,6 +34034,10 @@ function object(method, data) {
                           seenDocKeys.add(docKey);
                           documents.push(docToPush);
                         }
+                      }
+                      if (hasSearch && limit) {
+                        returnedDocuments++;
+                        if (returnedDocuments >= limit) break;
                       }
                     }
                     if (!hasDocuments && method === "update" && (data.upsert || options.upsert)) {
@@ -33906,7 +34054,7 @@ function object(method, data) {
                       });
                       let upsertDoc = {
                         ...data[type][i],
-                        ...reference,
+                        ...objectReference,
                         _id: upsertId.toString()
                       };
                       delete upsertDoc.isFilter;
@@ -33921,6 +34069,9 @@ function object(method, data) {
                   ;(0,_utilities_js__WEBPACK_IMPORTED_MODULE_4__/* .errorHandler */ .r_)(data, error, database, array);
                 }
               }
+            }
+            if (filterStorage) {
+              filterStorage.index = filterStartingIndex + (documents.length - documentsStartingLength);
             }
           }
         }
@@ -34006,13 +34157,17 @@ function createUpdate(update, options, data, isGlobal) {
         }
       else updates[key] = data[originalKey].replace(/\[(\d+)\]/g, ".$1");
     } else if (operator === "$delete" || operator === "$unset" || operator === "$slice") {
+      const removeFromArray = operator !== "$unset";
       operator = "$unset";
       updates[key] = 1;
       const pullkey = key.split(".");
       pullkey.shift();
       pullkey.pop();
-      if (!update["$pull"]) update["$pull"] = {};
-      update["$pull"][pullkey.join(".")] = null;
+      const pullPath = pullkey.join(".");
+      if (removeFromArray && pullPath) {
+        if (!update["$pull"]) update["$pull"] = {};
+        update["$pull"][pullPath] = null;
+      }
     } else if (operator === "$pop") {
       key = arrayKey;
       updates[key] = index || 1;
@@ -34062,7 +34217,7 @@ function replaceArray(data = {}) {
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (object);
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, [
-/* harmony export */   "A", 0, /* export default binding */ __WEBPACK_DEFAULT_EXPORT__
+/* harmony export */   "A", 0, __WEBPACK_DEFAULT_EXPORT__
 /* harmony export */ ]);
 
 
@@ -34074,6 +34229,7 @@ function replaceArray(data = {}) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   HI: () => (/* binding */ createFilter),
 /* harmony export */   KC: () => (/* binding */ dbClient),
+/* harmony export */   mR: () => (/* binding */ getFilterStorage),
 /* harmony export */   r_: () => (/* binding */ errorHandler),
 /* harmony export */   vd: () => (/* binding */ createData)
 /* harmony export */ });
@@ -34082,7 +34238,7 @@ function replaceArray(data = {}) {
 
 const organizations = {};
 async function dbClient(data) {
-  const storageUrl = data.storageConfig?.url;
+  const storageUrl = data.storageConfig?.connectionString || data.storageConfig?.url;
   if (storageUrl) {
     if (!organizations[data.organization_id]) {
       organizations[data.organization_id] = {};
@@ -34136,9 +34292,21 @@ process.on("orgDeleted", (organization_id) => {
     }, 5e3);
   }
 });
-async function createFilter(data, arrayObj) {
+function getFilterStorage(filter, storage, database, array) {
+  if (!filter) return;
+  if (!Array.isArray(filter.storages)) filter.storages = [];
+  let metadata = filter.storages.find(
+    (item) => item.storage === storage && item.database === database && item.array === array
+  );
+  if (!metadata) {
+    metadata = { storage, database, array };
+    filter.storages.push(metadata);
+  }
+  return metadata;
+}
+async function createFilter(data, arrayObj, filterStorage) {
   let query = {}, sort = {}, index = 0, limit = 0, count;
-  if (data.$filter) {
+  if (data.filter) {
     let convertIfDate = function(value) {
       if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/)) {
         return new Date(value);
@@ -34148,54 +34316,68 @@ async function createFilter(data, arrayObj) {
       for (let key in obj) {
         const isOperator = key.startsWith("$");
         const currentKey = parentKey ? `${parentKey}.${key}` : key;
-        if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+        const value = obj[key];
+        if (isOperator && !parentKey) {
+          result[key] = Array.isArray(value) ? value.map((condition) => {
+            if (condition && typeof condition === "object" && !Array.isArray(condition)) {
+              return mergeToDotNotation(condition);
+            }
+            return convertIfDate(condition);
+          }) : value;
+          continue;
+        }
+        if (value && typeof value === "object" && !Array.isArray(value)) {
           if (isOperator) {
             result[parentKey] = result[parentKey] || {};
-            result[parentKey][key] = obj[key];
+            result[parentKey][key] = value;
           } else {
-            mergeToDotNotation(obj[key], currentKey, result);
+            mergeToDotNotation(value, currentKey, result);
           }
         } else {
           if (isOperator) {
             result[parentKey] = result[parentKey] || {};
-            result[parentKey][key] = obj[key];
+            result[parentKey][key] = value;
           } else {
-            result[currentKey] = obj[key];
+            result[currentKey] = value;
           }
         }
       }
       return result;
     };
-    if (data.$filter.query) {
-      for (let key in data.$filter.query) {
-        if (Array.isArray(data.$filter.query[key])) {
-          query[key] = data.$filter.query[key].map((condition) => {
+    if (data.filter.query) {
+      for (let key in data.filter.query) {
+        if (Array.isArray(data.filter.query[key])) {
+          query[key] = data.filter.query[key].map((condition) => {
             let newCondition = {};
             mergeToDotNotation(condition, "", newCondition);
             return newCondition;
           });
-        } else if (typeof data.$filter.query[key] === "object" && data.$filter.query[key] !== null) {
-          mergeToDotNotation(data.$filter.query[key], key, query);
+        } else if (typeof data.filter.query[key] === "object" && data.filter.query[key] !== null) {
+          mergeToDotNotation(data.filter.query[key], key, query);
         } else {
-          query[key] = key === "_id" ? new mongodb__WEBPACK_IMPORTED_MODULE_0__/* .ObjectId */ .Vr(data.$filter.query[key]) : convertIfDate(data.$filter.query[key]);
+          query[key] = key === "_id" ? new mongodb__WEBPACK_IMPORTED_MODULE_0__/* .ObjectId */ .Vr(data.filter.query[key]) : convertIfDate(data.filter.query[key]);
         }
       }
     }
-    if (data.$filter.sort) {
-      for (let i = 0; i < data.$filter.sort.length; i++) {
-        let direction = data.$filter.sort[i].direction;
+    if (data.filter.sort) {
+      for (let i = 0; i < data.filter.sort.length; i++) {
+        let direction = data.filter.sort[i].direction;
         direction = direction === "desc" || direction === -1 ? -1 : 1;
-        sort[data.$filter.sort[i].key] = direction;
+        sort[data.filter.sort[i].key] = direction;
       }
     }
-    if (data.$filter.index) index = data.$filter.index;
-    if (data.$filter.limit) limit = data.$filter.limit;
+    if (filterStorage?.index !== void 0)
+      index = filterStorage.index;
+    else if (data.filter.startingIndex !== void 0)
+      index = data.filter.startingIndex;
+    else if (data.filter.index) index = data.filter.index;
+    if (data.filter.limit) limit = data.filter.limit;
   }
   if (data["organization_id"])
     query["organization_id"] = data["organization_id"];
-  if (data.$filter && arrayObj) {
+  if (data.filter && arrayObj) {
     count = await arrayObj.countDocuments(query);
-    data.$filter.count = count;
+    if (filterStorage) filterStorage.count = count;
   }
   return { query, sort, index, limit, count };
 }
@@ -34206,10 +34388,23 @@ function parseRegExp(regExpString) {
     options: matches[2]
   };
 }
+function getReferences(value) {
+  if (value === void 0 || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+function hasSharedReference(existing, incoming, key) {
+  const existingReferences = getReferences(existing[key]);
+  if (!existingReferences.length) return true;
+  const incomingReferences = getReferences(incoming[key]);
+  return existingReferences.some((value) => incomingReferences.includes(value));
+}
+function isSameRecord(existing, incoming, key) {
+  return existing[key] !== void 0 && incoming[key] !== void 0 && existing[key].toString() === incoming[key].toString() && hasSharedReference(existing, incoming, "$database") && hasSharedReference(existing, incoming, "$array");
+}
 function createData(data, array, type) {
   if (data[type] && data[type][0] && data[type][0].isFilter === "isEmptyObjectFilter") {
     data[type].shift();
-    data.isFilter = true;
+    data.filter.isFilter = true;
   }
   let key = "_id";
   if (type !== "object") key = "name";
@@ -34218,23 +34413,17 @@ function createData(data, array, type) {
   else {
     for (let i = 0; i < array.length; i++) {
       const matchIndex = data[type].findIndex(
-        (item) => item[key] === array[i][key]
+        (item) => type === "object" ? isSameRecord(item, array[i], key) : item[key] === array[i][key]
       );
       if (matchIndex !== -1) {
         for (let $type of ["$storage", "$database", "$array"]) {
           if (!data[type][matchIndex][$type])
             data[type][matchIndex][$type] = [];
-          if (!Array.isArray(data[type][matchIndex][$type])) {
-            data[type][matchIndex][$type] = [
-              data[type][matchIndex][$type]
-            ];
-            if (!data[type][matchIndex][$type].includes(
-              array[i][$type]
-            )) {
-              data[type][matchIndex][$type].push(array[i][$type]);
-            }
-          } else {
-            data[type][matchIndex][$type].push(array[i][$type]);
+          if (!Array.isArray(data[type][matchIndex][$type]))
+            data[type][matchIndex][$type] = [data[type][matchIndex][$type]];
+          const references = Array.isArray(array[i][$type]) ? array[i][$type] : [array[i][$type]];
+          for (const reference of references) {
+            if (reference !== void 0 && !data[type][matchIndex][$type].includes(reference)) data[type][matchIndex][$type].push(reference);
           }
           delete array[i][$type];
         }
@@ -39324,7 +39513,7 @@ const send = (data) => {
 /* harmony default export */ const src = ({ send });
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, [
-/* harmony export */   "A", 0, /* export default binding */ src,
+/* harmony export */   "A", 0, src,
 /* harmony export */   "t", 0, /* binding */ send
 /* harmony export */ ]);
 
