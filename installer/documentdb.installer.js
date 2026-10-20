@@ -1338,7 +1338,7 @@ class MongoBulkWriteError extends error_1.MongoServerError {
     get matchedCount() {
         return this.result.matchedCount;
     }
-    /** Number of documents modified. */
+    /** Number of documents updated. */
     get modifiedCount() {
         return this.result.modifiedCount;
     }
@@ -33715,14 +33715,14 @@ function object(method, data) {
                   by: data.user_id || data.clientId
                 };
               } else if (method === "update") {
-                if (!data[type][i].modified)
-                  data[type][i].modified = {
+                if (!data[type][i].updated)
+                  data[type][i].updated = {
                     on: new Date(data.timeStamp),
                     by: data.user_id || data.clientId
                   };
                 else
-                  data[type][i].modified.on = new Date(
-                    data[type][i].modified.on
+                  data[type][i].updated.on = new Date(
+                    data[type][i].updated.on
                   );
                 data[type][i].organization_id = data.organization_id;
                 createUpdate(update, options, data[type][i]);
@@ -33801,8 +33801,8 @@ function object(method, data) {
                         let object2 = data[type].find(
                           (obj) => obj._id && obj._id.toString() === document._id.toString()
                         );
-                        if (object2 && object2.$storage && object2.modified && object2.modified.on) {
-                          if (document.modified && new Date(object2.modified.on) > new Date(document.modified.on)) {
+                        if (object2 && object2.$storage && object2.updated && object2.updated.on) {
+                          if (document.updated && new Date(object2.updated.on) > new Date(document.updated.on)) {
                             object2 = { ...document, ...object2 };
                             let docUpdate = {};
                             let docOptions = {};
