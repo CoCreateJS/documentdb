@@ -46,8 +46,7 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./dist": "./dist/documentdb.js",
-    "./installer": "./installer/documentdb.installer.js"
+    "./dist": "./dist/documentdb.js"
   },
   "devDependencies": {
     "@cocreate/webpack": "^1.9.0"
