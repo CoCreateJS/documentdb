@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/CoCreateJS/documentdb/compare/v2.0.1...v2.0.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* bump CoCreate dependency versions ([12d8361](https://github.com/CoCreateJS/documentdb/commit/12d8361f542e8c27d291f4e2c8f808cbbb24d23c))
+
 ## [2.0.1](https://github.com/CoCreateJS/documentdb/compare/v2.0.0...v2.0.1) (2026-11-05)
 
 
