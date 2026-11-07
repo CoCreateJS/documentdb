@@ -49,10 +49,10 @@
     "./dist": "./dist/documentdb.js"
   },
   "devDependencies": {
-    "@cocreate/webpack": "^2.0.0"
+    "@cocreate/webpack": "^2.0.1"
   },
   "dependencies": {
-    "@cocreate/mongodb": "^2.0.0",
-    "@cocreate/utils": "^2.0.0"
+    "@cocreate/mongodb": "^2.0.1",
+    "@cocreate/utils": "^2.0.2"
   }
 }
